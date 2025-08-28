@@ -4,5 +4,4 @@ numpy
 scipy
 matplotlib
 plotly
-langchain
-openai
+langchain-google-genai
