@@ -1,70 +1,57 @@
-# app.py
-
 import streamlit as st
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import PromptTemplate
+import google.generativeai as genai
+import random
 
-# Load API Key from Streamlit secrets
+# Load Gemini API key
 gemini_api_key = st.secrets["gemini"]["api_key"]
+genai.configure(api_key=gemini_api_key)
 
-# Initialize Gemini model
-llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=gemini_api_key)
+# Create Gemini model
+model = genai.GenerativeModel("gemini-1.5-flash")
 
-st.title("📐 Engineering Maths AI Tutor")
-st.write("Solve problems OR generate practice questions automatically.")
+# Engineering Math topics
+topics = [
+    "Differentiation",
+    "Integration",
+    "Laplace Transform",
+    "Fourier Series",
+    "Matrix Algebra",
+    "Complex Numbers",
+    "Differential Equations",
+    "Vector Calculus",
+    "Probability & Statistics"
+]
 
-# Dropdown menu for action
-action = st.selectbox("Choose Action", ["Solve My Problem", "Generate Practice Question"])
+# UI
+st.title("⚙️ AI Engineering Math Tutor")
+st.write("This app generates **Engineering Math problems** and solves them step by step using Gemini API.")
 
-# --- SOLVE PROBLEM MODE ---
-if action == "Solve My Problem":
-    user_question = st.text_area("✍️ Enter your engineering math problem (calculation-based):")
-    if st.button("Solve"):
-        if user_question.strip() == "":
-            st.warning("Please enter a problem.")
+# Sidebar - pick mode
+mode = st.sidebar.radio("Choose Mode", ["Generate Question", "Enter Your Own"])
+
+if mode == "Generate Question":
+    topic = random.choice(topics)
+    st.subheader(f"📘 Auto-Generated Question from {topic}")
+
+    # Ask Gemini to create a question + solution
+    question_prompt = f"Generate one challenging {topic} question for engineering students."
+    question = model.generate_content(question_prompt).text
+
+    st.write(f"**Question:** {question}")
+
+    if st.button("Solve This Question"):
+        solution_prompt = f"Solve this engineering math problem step by step: {question}"
+        solution = model.generate_content(solution_prompt).text
+        st.success("✅ Step-by-Step Solution:")
+        st.write(solution)
+
+else:  # User enters their own question
+    user_question = st.text_area("✍️ Enter your Engineering Math question:")
+    if st.button("Solve My Question"):
+        if user_question.strip():
+            solution_prompt = f"Solve this engineering math problem step by step: {user_question}"
+            solution = model.generate_content(solution_prompt).text
+            st.success("✅ Step-by-Step Solution:")
+            st.write(solution)
         else:
-            template = """You are an Engineering Mathematics tutor.
-            Solve the problem step by step with full explanations:
-            {question}"""
-            prompt = PromptTemplate(input_variables=["question"], template=template)
-            response = llm.invoke(prompt.format(question=user_question))
-            st.subheader("✅ Step-by-Step Solution")
-            st.write(response.content)
-
-# --- GENERATE PRACTICE MODE ---
-elif action == "Generate Practice Question":
-    topic = st.selectbox("Choose Topic", [
-        "Differentiation",
-        "Integration",
-        "Linear Algebra",
-        "Probability & Statistics",
-        "Complex Numbers",
-        "Laplace Transform",
-        "Fourier Series"
-    ])
-    num_qs = st.slider("Number of Questions", 1, 5, 1)
-
-    if st.button("Generate Questions"):
-        template = """You are an Engineering Mathematics tutor.
-        Generate {n} exam-style practice questions from the topic: {topic}.
-        The questions should require calculations, not just theory.
-        Do not provide solutions yet."""
-        prompt = PromptTemplate(input_variables=["n", "topic"], template=template)
-        response = llm.invoke(prompt.format(n=num_qs, topic=topic))
-        
-        st.subheader("📘 Practice Questions")
-        st.write(response.content)
-
-        # Ask if user wants solutions
-        if st.button("Show Solutions"):
-            sol_template = """Now provide detailed step-by-step solutions for these {n} {topic} problems:
-            {questions}"""
-            sol_prompt = PromptTemplate(
-                input_variables=["n", "topic", "questions"],
-                template=sol_template
-            )
-            sol_response = llm.invoke(sol_prompt.format(
-                n=num_qs, topic=topic, questions=response.content
-            ))
-            st.subheader("✅ Solutions")
-            st.write(sol_response.content)
+            st.warning("Please enter a question.")
