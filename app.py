@@ -1,116 +1,70 @@
+# app.py
+
 import streamlit as st
-import os
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.prompts import PromptTemplate
 
-# Utils
-from utils import algebra, calculus, diff_eq, numerical
+# Load API Key from Streamlit secrets
+gemini_api_key = st.secrets["gemini"]["api_key"]
 
-# --- Gemini API setup ---
-try:
-    from langchain_google_genai import ChatGoogleGenerativeAI
-    gemini_api_key = st.secrets["gemini"]["api_key"]  # Cloud secrets
-except KeyError:
-    gemini_api_key = os.getenv("GEMINI_API_KEY")      # Local env fallback
-except ModuleNotFoundError:
-    gemini_api_key = None
+# Initialize Gemini model
+llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=gemini_api_key)
 
-if gemini_api_key:
-    chat_model = ChatGoogleGenerativeAI(api_key=gemini_api_key, model="chat-bison-001")
+st.title("📐 Engineering Maths AI Tutor")
+st.write("Solve problems OR generate practice questions automatically.")
 
-    def ask_gemini(question):
-        try:
-            response = chat_model.predict_messages([{"role": "user", "content": question}])
-            return response.content
-        except:
-            return "Error: Could not get explanation from Gemini."
-else:
-    def ask_gemini(question):
-        return "Gemini API key not found. Explanation unavailable."
+# Dropdown menu for action
+action = st.selectbox("Choose Action", ["Solve My Problem", "Generate Practice Question"])
 
-# --- Streamlit App ---
-st.set_page_config(page_title="Engineering Maths AI Assistant", layout="wide")
-st.title("Engineering Mathematics Interactive App")
+# --- SOLVE PROBLEM MODE ---
+if action == "Solve My Problem":
+    user_question = st.text_area("✍️ Enter your engineering math problem (calculation-based):")
+    if st.button("Solve"):
+        if user_question.strip() == "":
+            st.warning("Please enter a problem.")
+        else:
+            template = """You are an Engineering Mathematics tutor.
+            Solve the problem step by step with full explanations:
+            {question}"""
+            prompt = PromptTemplate(input_variables=["question"], template=template)
+            response = llm.invoke(prompt.format(question=user_question))
+            st.subheader("✅ Step-by-Step Solution")
+            st.write(response.content)
 
-option = st.sidebar.selectbox(
-    "Select Topic",
-    ["Algebra", "Calculus", "Differential Equations", "Numerical Methods"]
-)
+# --- GENERATE PRACTICE MODE ---
+elif action == "Generate Practice Question":
+    topic = st.selectbox("Choose Topic", [
+        "Differentiation",
+        "Integration",
+        "Linear Algebra",
+        "Probability & Statistics",
+        "Complex Numbers",
+        "Laplace Transform",
+        "Fourier Series"
+    ])
+    num_qs = st.slider("Number of Questions", 1, 5, 1)
 
-# ---------------- Algebra ----------------
-if option == "Algebra":
-    st.header("Linear Algebra Solver")
-    eq_input = st.text_input("Enter equation (e.g., '2*x + 3 = 7'):")
-    var_input = st.text_input("Variable (e.g., 'x'):")
-    if st.button("Solve Algebra"):
-        try:
-            solution = algebra.solve_linear_eq(eq_input, var_input)
-            st.success(f"Answer (Python computed): {solution}")
-            explanation = ask_gemini(f"Solve the equation {eq_input} step by step.")
-            st.info(f"Explanation (Gemini AI): {explanation}")
-        except:
-            st.error("Invalid equation input.")
+    if st.button("Generate Questions"):
+        template = """You are an Engineering Mathematics tutor.
+        Generate {n} exam-style practice questions from the topic: {topic}.
+        The questions should require calculations, not just theory.
+        Do not provide solutions yet."""
+        prompt = PromptTemplate(input_variables=["n", "topic"], template=template)
+        response = llm.invoke(prompt.format(n=num_qs, topic=topic))
+        
+        st.subheader("📘 Practice Questions")
+        st.write(response.content)
 
-# ---------------- Calculus ----------------
-elif option == "Calculus":
-    st.header("Calculus Operations")
-    calc_option = st.radio("Operation", ["Derivative", "Integral"])
-    expr_input = st.text_input("Enter expression (e.g., 'x**2 + 3*x'):")
-    var_input = st.text_input("Variable (e.g., 'x'):")
-    if st.button("Compute Calculus"):
-        try:
-            if calc_option == "Derivative":
-                result = calculus.derivative(expr_input, var_input)
-            else:
-                result = calculus.integral(expr_input, var_input)
-            st.success(f"Answer (Python computed): {result}")
-            explanation = ask_gemini(f"Compute the {calc_option.lower()} of {expr_input} with respect to {var_input} step by step.")
-            st.info(f"Explanation (Gemini AI): {explanation}")
-        except:
-            st.error("Invalid input.")
-
-# --------------- Differential Equations ---------------
-elif option == "Differential Equations":
-    st.header("ODE Solver")
-    eq_input = st.text_input("Enter ODE expression (e.g., 'f.diff(x) - f = 0'):")
-    func_input = st.text_input("Function (e.g., 'f'):")
-    var_input = st.text_input("Variable (e.g., 'x'):")
-    if st.button("Solve ODE"):
-        try:
-            solution = diff_eq.solve_ode(eq_input, func_input, var_input)
-            st.success(f"Answer (Python computed): {solution}")
-            explanation = ask_gemini(f"Solve the ODE {eq_input} step by step.")
-            st.info(f"Explanation (Gemini AI): {explanation}")
-        except:
-            st.error("Invalid ODE input.")
-
-# ---------------- Numerical Methods ----------------
-elif option == "Numerical Methods":
-    st.header("Numerical Operations")
-    num_option = st.radio("Operation", ["Root Finding", "Numerical Integration"])
-
-    if num_option == "Root Finding":
-        st.info("Example: Define a function like lambda x: x**2 - 4")
-        func_input = st.text_input("Enter function:")
-        x0 = st.number_input("Initial guess:", value=1.0)
-        if st.button("Find Root"):
-            try:
-                func = eval(func_input)
-                root = numerical.find_root(func, x0)
-                st.success(f"Answer (Python computed): {root}")
-                explanation = ask_gemini(f"Find root of the function {func_input} starting at {x0} step by step.")
-                st.info(f"Explanation (Gemini AI): {explanation}")
-            except:
-                st.error("Invalid function input.")
-    else:
-        st.info("Example: Define a function like lambda x: x**2")
-        func_input = st.text_input("Enter function:")
-        a = st.number_input("Lower limit:", value=0.0)
-        b = st.number_input("Upper limit:", value=1.0)
-        if st.button("Integrate Numerically"):
-            try:
-                func = eval(func_input)
-                result = numerical.numerical_integral(func, a, b)
-                st.success(f"Answer (Python computed): {result}")
-                explanation = ask_gemini(f"Compute the numerical integral of the function {func_input} from {a} to {b} step by step.")
-                st.info(f"Explanation (Gemini AI): {explanation}")
-            except:
-                st.error("Invalid input.")
+        # Ask if user wants solutions
+        if st.button("Show Solutions"):
+            sol_template = """Now provide detailed step-by-step solutions for these {n} {topic} problems:
+            {questions}"""
+            sol_prompt = PromptTemplate(
+                input_variables=["n", "topic", "questions"],
+                template=sol_template
+            )
+            sol_response = llm.invoke(sol_prompt.format(
+                n=num_qs, topic=topic, questions=response.content
+            ))
+            st.subheader("✅ Solutions")
+            st.write(sol_response.content)
