@@ -2,56 +2,47 @@ import streamlit as st
 import google.generativeai as genai
 import random
 
-# Load Gemini API key
+# Configure API
 gemini_api_key = st.secrets["gemini"]["api_key"]
 genai.configure(api_key=gemini_api_key)
 
-# Create Gemini model
+# Load Gemini model
 model = genai.GenerativeModel("gemini-1.5-flash")
 
-# Engineering Math topics
-topics = [
-    "Differentiation",
-    "Integration",
-    "Laplace Transform",
-    "Fourier Series",
-    "Matrix Algebra",
-    "Complex Numbers",
-    "Differential Equations",
-    "Vector Calculus",
-    "Probability & Statistics"
+# Sample engineering maths questions
+questions = [
+    "Solve for x: 5x + 7 = 27",
+    "Find the derivative of f(x) = 3x^3 + 2x^2 - 5x + 7",
+    "Evaluate the integral ∫ (2x^2 + 3x - 4) dx",
+    "A particle moves such that s(t) = t^3 - 6t^2 + 9t. Find velocity and acceleration at t = 2.",
+    "Find the Laplace transform of f(t) = e^(-2t) * sin(3t)",
+    "If A = [[2,1],[3,4]], find det(A) and A⁻¹."
 ]
 
-# UI
-st.title("⚙️ AI Engineering Math Tutor")
-st.write("This app generates **Engineering Math problems** and solves them step by step using Gemini API.")
+st.title("📘 Engineering Maths Tutor (Humanized Solutions)")
+st.write("Generate random engineering maths problems with step-by-step solutions explained in a natural, human-like way.")
 
-# Sidebar - pick mode
-mode = st.sidebar.radio("Choose Mode", ["Generate Question", "Enter Your Own"])
+# Random question button
+if st.button("🎲 Generate Random Question"):
+    q = random.choice(questions)
+    st.session_state["question"] = q
 
-if mode == "Generate Question":
-    topic = random.choice(topics)
-    st.subheader(f"📘 Auto-Generated Question from {topic}")
+# Show current question
+if "question" in st.session_state:
+    st.subheader("Question:")
+    st.write(st.session_state["question"])
 
-    # Ask Gemini to create a question + solution
-    question_prompt = f"Generate one challenging {topic} question for engineering students."
-    question = model.generate_content(question_prompt).text
+    if st.button("🧾 Show Solution"):
+        # Step 1: Generate AI solution
+        solution = model.generate_content(
+            f"Solve this engineering maths question step by step:\n{st.session_state['question']}"
+        ).text
 
-    st.write(f"**Question:** {question}")
+        # Step 2: Humanize the explanation
+        humanized = model.generate_content(
+            f"Rewrite the following explanation as if a human tutor is teaching a student. "
+            f"Make it natural, avoid AI wording, and explain step-by-step like in a classroom:\n\n{solution}"
+        ).text
 
-    if st.button("Solve This Question"):
-        solution_prompt = f"Solve this engineering math problem step by step: {question}"
-        solution = model.generate_content(solution_prompt).text
-        st.success("✅ Step-by-Step Solution:")
-        st.write(solution)
-
-else:  # User enters their own question
-    user_question = st.text_area("✍️ Enter your Engineering Math question:")
-    if st.button("Solve My Question"):
-        if user_question.strip():
-            solution_prompt = f"Solve this engineering math problem step by step: {user_question}"
-            solution = model.generate_content(solution_prompt).text
-            st.success("✅ Step-by-Step Solution:")
-            st.write(solution)
-        else:
-            st.warning("Please enter a question.")
+        st.subheader("Solution:")
+        st.write(humanized)
