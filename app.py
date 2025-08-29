@@ -1,48 +1,61 @@
 import streamlit as st
 import google.generativeai as genai
-import random
 
-# Configure API
-gemini_api_key = st.secrets["gemini"]["api_key"]
-genai.configure(api_key=gemini_api_key)
+# Configure API Key from Streamlit secrets
+genai.configure(api_key=st.secrets["gemini"]["api_key"])
 
-# Load Gemini model
-model = genai.GenerativeModel("gemini-1.5-flash")
+# Humanizer function to remove "AI tone"
+def humanize_response(text):
+    replacements = {
+        "AI": "tutor",
+        "I am an AI": "I am your tutor",
+        "As an AI": "As your tutor",
+        "AI model": "guide",
+        "assistant": "tutor"
+    }
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+    return text
 
-# Sample engineering maths questions
-questions = [
-    "Solve for x: 5x + 7 = 27",
-    "Find the derivative of f(x) = 3x^3 + 2x^2 - 5x + 7",
-    "Evaluate the integral ∫ (2x^2 + 3x - 4) dx",
-    "A particle moves such that s(t) = t^3 - 6t^2 + 9t. Find velocity and acceleration at t = 2.",
-    "Find the Laplace transform of f(t) = e^(-2t) * sin(3t)",
-    "If A = [[2,1],[3,4]], find det(A) and A⁻¹."
+# Streamlit App Layout
+st.set_page_config(page_title="Engineering Maths Tutor", layout="wide")
+st.title("📘 Collaborative Engineering Maths Tutor")
+
+st.write("👨‍🏫 Pick a topic, ask questions together, and let your **tutor** guide you step by step.")
+
+# Sidebar for topics
+topics = [
+    "Calculus", "Linear Algebra", "Differential Equations",
+    "Complex Numbers", "Probability & Statistics",
+    "Vector Analysis", "Transforms (Laplace, Fourier, Z)",
+    "Numerical Methods", "Engineering Mechanics (Maths-based)"
 ]
 
-st.title("📘 Engineering Maths Tutor (Humanized Solutions)")
-st.write("Generate random engineering maths problems with step-by-step solutions explained in a natural, human-like way.")
+topic_choice = st.sidebar.selectbox("📂 Choose a Topic", topics)
+st.sidebar.write(f"✅ Current Topic: **{topic_choice}**")
 
-# Random question button
-if st.button("🎲 Generate Random Question"):
-    q = random.choice(questions)
-    st.session_state["question"] = q
+# Chat history for collaboration
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
-# Show current question
-if "question" in st.session_state:
-    st.subheader("Question:")
-    st.write(st.session_state["question"])
+# Display chat history
+for role, content in st.session_state.chat_history:
+    if role == "student":
+        st.chat_message("user").write(content)
+    else:
+        st.chat_message("assistant").write(content)
 
-    if st.button("🧾 Show Solution"):
-        # Step 1: Generate AI solution
-        solution = model.generate_content(
-            f"Solve this engineering maths question step by step:\n{st.session_state['question']}"
-        ).text
+# Student input
+if prompt := st.chat_input("Ask your tutor a question or suggest a problem..."):
+    # Save student message
+    st.session_state.chat_history.append(("student", prompt))
+    st.chat_message("user").write(prompt)
 
-        # Step 2: Humanize the explanation
-        humanized = model.generate_content(
-            f"Rewrite the following explanation as if a human tutor is teaching a student. "
-            f"Make it natural, avoid AI wording, and explain step-by-step like in a classroom:\n\n{solution}"
-        ).text
+    # AI Tutor Response
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    response = model.generate_content(f"You are a human tutor. Topic: {topic_choice}. Question: {prompt}. \
+    Answer like a human professor with clear steps, examples, and explanations. Avoid AI references.")
 
-        st.subheader("Solution:")
-        st.write(humanized)
+    answer = humanize_response(response.text)
+    st.session_state.chat_history.append(("tutor", answer))
+    st.chat_message("assistant").write(answer)
