@@ -1,14 +1,5 @@
 streamlit
-sympy
-numpy
-scipy
-matplotlib
-plotly
+python-dotenv
 langchain-google-genai
-google-generativeai
-langchain
 langchain-community
-
-
 firebase-admin
-
