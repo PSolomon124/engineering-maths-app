@@ -1,64 +1,44 @@
-import os
 import streamlit as st
-from dotenv import load_dotenv
-import firebase_admin
-from firebase_admin import credentials, firestore
 from langchain_google_genai import ChatGoogleGenerativeAI
+import firebase_admin
+from firebase_admin import credentials, db
+import json
 
-# Load environment variables (for local dev)
-load_dotenv()
+# --- Load Google API Key from Streamlit Secrets ---
+google_api_key = st.secrets["GOOGLE_API_KEY"]
 
-# ------------------------------
-# Google API setup
-# ------------------------------
-GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY")
-if not GOOGLE_API_KEY:
-    st.error("❌ Missing GOOGLE_API_KEY in secrets.toml or .env")
-    st.stop()
+# --- Firebase Setup ---
+firebase_config = st.secrets["firebase"]
 
-llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=GOOGLE_API_KEY)
+if not firebase_admin._apps:
+    cred = credentials.Certificate(json.loads(firebase_config["service_account"]))
+    firebase_admin.initialize_app(cred, {
+        "databaseURL": firebase_config["databaseURL"]
+    })
 
-# ------------------------------
-# Firebase setup
-# ------------------------------
-if "firebase" in st.secrets:
-    firebase_secrets = st.secrets["firebase"]
+# --- LangChain Model ---
+llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-flash",
+    google_api_key=google_api_key
+)
 
-    firebase_creds = {
-        "type": firebase_secrets.get("type"),
-        "project_id": firebase_secrets.get("project_id"),
-        "private_key_id": firebase_secrets.get("private_key_id"),
-        "private_key": firebase_secrets.get("private_key").replace("\\n", "\n"),
-        "client_email": firebase_secrets.get("client_email"),
-        "client_id": firebase_secrets.get("client_id"),
-        "auth_uri": firebase_secrets.get("auth_uri"),
-        "token_uri": firebase_secrets.get("token_uri"),
-        "auth_provider_x509_cert_url": firebase_secrets.get("auth_provider_x509_cert_url"),
-        "client_x509_cert_url": firebase_secrets.get("client_x509_cert_url"),
-    }
+# --- Streamlit UI ---
+st.title("Engineering Maths App 🔢")
+user_input = st.text_input("Enter a math problem:")
 
-    if not firebase_admin._apps:
-        cred = credentials.Certificate(firebase_creds)
-        firebase_admin.initialize_app(cred)
-
-    db = firestore.client()
-else:
-    db = None
-    st.warning("⚠️ Firebase not configured. Add it in secrets.toml")
-
-# ------------------------------
-# Streamlit UI
-# ------------------------------
-st.title("🚀 Engineering Maths App")
-
-user_input = st.text_input("Enter your math problem:")
-
-if st.button("Solve") and user_input:
-    with st.spinner("Thinking..."):
+if st.button("Solve"):
+    if user_input.strip():
         response = llm.invoke(user_input)
-        st.write("### ✅ Solution:")
-        st.write(response.content)
+        solution = response.content
 
-        if db:
-            db.collection("problems").add({"question": user_input, "answer": response.content})
-            st.success("Saved to Firebase!")
+        # Save to Firebase Realtime DB
+        ref = db.reference("problems")
+        ref.push({
+            "question": user_input,
+            "solution": solution
+        })
+
+        st.write("### ✅ Solution:")
+        st.write(solution)
+    else:
+        st.warning("Please enter a problem.")
