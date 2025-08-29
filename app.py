@@ -4,22 +4,22 @@ import firebase_admin
 from firebase_admin import credentials, db
 
 # ----------------------------
-# Load Google API Key
+# Load Gemini API Key
 # ----------------------------
-if "GOOGLE_API_KEY" not in st.secrets:
-    st.error("❌ Missing GOOGLE_API_KEY in your secrets.toml")
+if "gemini" not in st.secrets or "GOOGLE_API_KEY" not in st.secrets["gemini"]:
+    st.error("❌ Missing [gemini] GOOGLE_API_KEY in secrets.toml")
     st.stop()
 
 llm = ChatGoogleGenerativeAI(
     model="gemini-1.5-pro",
-    google_api_key=st.secrets["GOOGLE_API_KEY"]
+    google_api_key=st.secrets["gemini"]["GOOGLE_API_KEY"]
 )
 
 # ----------------------------
 # Initialize Firebase
 # ----------------------------
 if "firebase" not in st.secrets:
-    st.error("❌ Missing Firebase section in your secrets.toml")
+    st.error("❌ Missing [firebase] section in secrets.toml")
     st.stop()
 
 firebase_secrets = st.secrets["firebase"]
@@ -37,14 +37,15 @@ if not firebase_admin._apps:
         "auth_provider_x509_cert_url": firebase_secrets["auth_provider_x509_cert_url"],
         "client_x509_cert_url": firebase_secrets["client_x509_cert_url"]
     })
+    # Add your Firebase Realtime Database URL here 👇
     firebase_admin.initialize_app(cred, {
-        "databaseURL": firebase_secrets["databaseURL"]
+        "databaseURL": "https://engineering-maths-app.firebaseio.com"
     })
 
 # ----------------------------
 # Streamlit UI
 # ----------------------------
-st.title("📐 Engineering Maths Tutor with Firebase")
+st.title("📐 Engineering Maths Tutor (Gemini + Firebase)")
 
 user_input = st.text_input("Enter your maths problem:")
 
