@@ -1,44 +1,58 @@
 import streamlit as st
-from langchain_google_genai import ChatGoogleGenerativeAI
 import firebase_admin
-from firebase_admin import credentials, db
-import json
+from firebase_admin import credentials, firestore
+from langchain_google_genai import ChatGoogleGenerativeAI
 
-# --- Load Google API Key from Streamlit Secrets ---
-google_api_key = st.secrets["GOOGLE_API_KEY"]
+# Load Firebase credentials from Streamlit secrets
+firebase_secrets = st.secrets["firebase"]
 
-# --- Firebase Setup ---
-firebase_config = st.secrets["firebase"]
+cred = credentials.Certificate({
+    "type": firebase_secrets["type"],
+    "project_id": firebase_secrets["project_id"],
+    "private_key_id": firebase_secrets["private_key_id"],
+    "private_key": firebase_secrets["private_key"].replace("\\n", "\n"),
+    "client_email": firebase_secrets["client_email"],
+    "client_id": firebase_secrets["client_id"],
+    "auth_uri": firebase_secrets["auth_uri"],
+    "token_uri": firebase_secrets["token_uri"],
+    "auth_provider_x509_cert_url": firebase_secrets["auth_provider_x509_cert_url"],
+    "client_x509_cert_url": firebase_secrets["client_x509_cert_url"]
+})
 
+# Initialize Firebase only once
 if not firebase_admin._apps:
-    cred = credentials.Certificate(json.loads(firebase_config["service_account"]))
-    firebase_admin.initialize_app(cred, {
-        "databaseURL": firebase_config["databaseURL"]
-    })
+    firebase_admin.initialize_app(cred)
 
-# --- LangChain Model ---
-llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
-    google_api_key=google_api_key
-)
+db = firestore.client()
 
-# --- Streamlit UI ---
-st.title("Engineering Maths App 🔢")
-user_input = st.text_input("Enter a math problem:")
+# Initialize AI Tutor
+llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", google_api_key=st.secrets["GOOGLE_API_KEY"])
 
-if st.button("Solve"):
-    if user_input.strip():
-        response = llm.invoke(user_input)
-        solution = response.content
+st.title("📘 Collaborative Math Tutor")
+st.write("Students can collaboratively pick a topic and learn together with an AI tutor.")
 
-        # Save to Firebase Realtime DB
-        ref = db.reference("problems")
-        ref.push({
-            "question": user_input,
-            "solution": solution
-        })
+# Topic selection
+topic = st.text_input("Enter a topic (e.g., Differentiation, Matrix, Integration):")
 
-        st.write("### ✅ Solution:")
-        st.write(solution)
-    else:
-        st.warning("Please enter a problem.")
+if topic:
+    st.subheader(f"Topic Selected: {topic}")
+
+    # Save to Firestore
+    doc_ref = db.collection("math_topics").document("current")
+    doc_ref.set({"topic": topic})
+
+    # AI Tutor Guidance
+    prompt = f"Explain {topic} step by step with one worked example for students."
+    response = llm.invoke(prompt)
+    st.write("### AI Tutor Response")
+    st.write(response.content)
+
+    # Collaborative Q&A
+    question = st.text_input("Ask a question about this topic:")
+    if question:
+        q_response = llm.invoke(f"Answer this math question with steps: {question}")
+        st.write("### Answer")
+        st.write(q_response.content)
+
+        # Store question for other students
+        db.collection("questions").add({"topic": topic, "question": question})
