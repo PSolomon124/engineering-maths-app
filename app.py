@@ -1,61 +1,70 @@
 import streamlit as st
-import google.generativeai as genai
+import random
+from google import genai
+from google.genai import types
+import firebase_admin
+from firebase_admin import credentials, db
 
-# Configure API Key from Streamlit secrets
-genai.configure(api_key=st.secrets["gemini"]["api_key"])
+# ----------------
+# Firebase Setup
+# ----------------
+if not firebase_admin._apps:
+    cred = credentials.Certificate("firebase_key.json")  # Add your Firebase key
+    firebase_admin.initialize_app(cred, {
+        'databaseURL': 'https://YOUR_PROJECT.firebaseio.com/'
+    })
 
-# Humanizer function to remove "AI tone"
-def humanize_response(text):
-    replacements = {
-        "AI": "tutor",
-        "I am an AI": "I am your tutor",
-        "As an AI": "As your tutor",
-        "AI model": "guide",
-        "assistant": "tutor"
-    }
-    for k, v in replacements.items():
-        text = text.replace(k, v)
-    return text
+# ----------------
+# Gemini Setup
+# ----------------
+client = genai.Client(api_key=st.secrets["gemini"]["api_key"])
 
-# Streamlit App Layout
-st.set_page_config(page_title="Engineering Maths Tutor", layout="wide")
-st.title("📘 Collaborative Engineering Maths Tutor")
+st.title("📚 Collaborative AI Tutor")
 
-st.write("👨‍🏫 Pick a topic, ask questions together, and let your **tutor** guide you step by step.")
+# Generate or join session
+session_id = st.text_input("Enter Session Code (or leave blank to create new):")
+if not session_id:
+    session_id = str(random.randint(10000, 99999))
+    st.success(f"New session created: {session_id}")
 
-# Sidebar for topics
-topics = [
-    "Calculus", "Linear Algebra", "Differential Equations",
-    "Complex Numbers", "Probability & Statistics",
-    "Vector Analysis", "Transforms (Laplace, Fourier, Z)",
-    "Numerical Methods", "Engineering Mechanics (Maths-based)"
-]
+ref = db.reference(f"sessions/{session_id}")
 
-topic_choice = st.sidebar.selectbox("📂 Choose a Topic", topics)
-st.sidebar.write(f"✅ Current Topic: **{topic_choice}**")
+# Start with a question
+if st.button("Generate New Question"):
+    prompt = "Generate a university-level calculus question."
+    response = client.models.generate_content(
+        model="gemini-1.5-flash",
+        contents=prompt
+    )
+    question = response.text
+    ref.child("question").set(question)
+    ref.child("answers").set({})  # reset answers
 
-# Chat history for collaboration
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+# Display question
+question = ref.child("question").get()
+if question:
+    st.subheader("📖 Current Question")
+    st.write(question)
 
-# Display chat history
-for role, content in st.session_state.chat_history:
-    if role == "student":
-        st.chat_message("user").write(content)
-    else:
-        st.chat_message("assistant").write(content)
+    # Student submits answer
+    answer = st.text_input("Your Answer:")
+    if st.button("Submit Answer"):
+        ref.child("answers").push(answer)
 
-# Student input
-if prompt := st.chat_input("Ask your tutor a question or suggest a problem..."):
-    # Save student message
-    st.session_state.chat_history.append(("student", prompt))
-    st.chat_message("user").write(prompt)
+    # Show all answers
+    st.subheader("📝 Group Answers")
+    answers = ref.child("answers").get()
+    if answers:
+        for k, v in answers.items():
+            st.write(f"- {v}")
 
     # AI Tutor Response
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    response = model.generate_content(f"You are a human tutor. Topic: {topic_choice}. Question: {prompt}. \
-    Answer like a human professor with clear steps, examples, and explanations. Avoid AI references.")
-
-    answer = humanize_response(response.text)
-    st.session_state.chat_history.append(("tutor", answer))
-    st.chat_message("assistant").write(answer)
+    if st.button("Get Tutor Guidance"):
+        answers_text = "\n".join(answers.values()) if answers else "No answers yet."
+        tutor_prompt = f"Question: {question}\nStudent Answers: {answers_text}\nProvide step-by-step explanation as a friendly human tutor."
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=tutor_prompt
+        )
+        st.subheader("👩‍🏫 Tutor's Guidance")
+        st.write(response.text)
