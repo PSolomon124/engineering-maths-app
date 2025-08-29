@@ -5,3 +5,6 @@ scipy
 matplotlib
 plotly
 langchain-google-genai
+google-generativeai
+langchain
+langchain-community
