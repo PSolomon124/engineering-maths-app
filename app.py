@@ -1,88 +1,54 @@
 # app.py
-
-import os
-import time
-import json
 import streamlit as st
-from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, TextLoader
 from langchain.prompts import PromptTemplate
 
-# -----------------------
-# Load environment variables
-load_dotenv()
-google_api_key = os.getenv("GOOGLE_API_KEY")
+# ---------------------------
+# Load Gemini API key from Streamlit secrets
+# ---------------------------
+api_key = st.secrets["GEMINI_API_KEY"]
 
-if not google_api_key:
-    st.error("❌ GOOGLE_API_KEY not found. Please set it in .env or Streamlit secrets.")
-    st.stop()
-
-# -----------------------
-# Initialize Gemini LLM (use Flash for higher rate limits)
+# Initialize Gemini model
 llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
-    google_api_key=google_api_key,
-    temperature=0.3
+    model="gemini-1.5-flash",  # you can also use gemini-1.5-pro
+    google_api_key=api_key
 )
 
-# -----------------------
-# Safe invoke with retries (handles ResourceExhausted errors)
-def safe_invoke(llm, question, retries=3, delay=5):
-    for attempt in range(retries):
-        try:
-            return llm.invoke(question)
-        except Exception as e:
-            if "ResourceExhausted" in str(e) and attempt < retries - 1:
-                wait = delay * (attempt + 1)
-                st.warning(f"⚠️ Resource limit hit. Retrying in {wait}s...")
-                time.sleep(wait)
-                continue
-            raise e
+# Prompt template for math/engineering problems
+template = """
+You are an expert engineering mathematics tutor.
+Solve the following problem step by step and explain clearly:
 
-# -----------------------
+{problem}
+"""
+
+prompt = PromptTemplate(
+    input_variables=["problem"],
+    template=template
+)
+
+# ---------------------------
 # Streamlit UI
-st.set_page_config(page_title="Resume Parser", layout="centered")
-st.title("📄 AI Resume Parser")
-st.write("Upload your resume and ask questions about it.")
+# ---------------------------
+st.set_page_config(page_title="Engineering Math Solver", page_icon="📐")
 
-uploaded_file = st.file_uploader("Upload Resume", type=["pdf", "docx", "txt"])
-question = st.text_input("Ask something about this resume:")
+st.title("📐 Engineering Math Solver")
+st.write("Enter any math/engineering problem and get a step-by-step solution powered by Gemini.")
 
-if uploaded_file and question:
-    # Save uploaded file
-    file_path = f"temp_{uploaded_file.name}"
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+# Text input from user
+problem = st.text_area("✍️ Enter your problem here:", height=150)
 
-    # Load file
-    if uploaded_file.type == "application/pdf":
-        loader = PyPDFLoader(file_path)
-    elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        loader = Docx2txtLoader(file_path)
+if st.button("Solve"):
+    if problem.strip():
+        with st.spinner("Solving with Gemini..."):
+            # Build the prompt
+            final_prompt = prompt.format(problem=problem)
+
+            # Query Gemini
+            response = llm.invoke(final_prompt)
+
+            # Show result
+            st.subheader("✅ Step-by-step Solution:")
+            st.write(response.content)
     else:
-        loader = TextLoader(file_path)
-
-    documents = loader.load()
-    resume_text = " ".join([doc.page_content for doc in documents])
-
-    # Prompt
-    prompt_template = PromptTemplate(
-        input_variables=["resume", "question"],
-        template="""
-        You are an AI Resume Assistant.
-        Resume: {resume}
-        Question: {question}
-        Provide a clear, concise answer.
-        """
-    )
-
-    prompt = prompt_template.format(resume=resume_text, question=question)
-
-    with st.spinner("Analyzing resume..."):
-        try:
-            response = safe_invoke(llm, prompt)
-            st.success("✅ Done!")
-            st.write(response.content if hasattr(response, "content") else response)
-        except Exception as e:
-            st.error(f"❌ Error: {e}")
+        st.warning("Please enter a problem first.")
