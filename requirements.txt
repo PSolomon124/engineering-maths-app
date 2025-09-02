@@ -2,3 +2,8 @@ streamlit
 firebase-admin
 langchain-google-genai
 python-dotenv
+
+
+langchain
+langchain-community
+langchain-openai
